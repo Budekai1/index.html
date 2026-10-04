@@ -900,12 +900,24 @@ function renderCodigos(){
   const busca = buscaEl ? norm(buscaEl.value) : '';
   const tbody = document.getElementById('tbodyCodigos');
   if(!tbody) return;
-  if(!busca){ tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">Digite algo para pesquisar.</td></tr>'; return; }
-  const filtrados = STORE.codigos.filter(c => norm(c.codigo).includes(busca) || norm(c.nome).includes(busca));
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">Nenhum código encontrado.</td></tr>'; return; }
+
+  // Usa ternário: se tiver texto na busca, ele filtra; se não tiver, exibe todos os códigos (STORE.codigos)
+  const filtrados = busca 
+    ? STORE.codigos.filter(c => norm(c.codigo).includes(busca) || norm(c.nome).includes(busca)) 
+    : STORE.codigos;
+
+  if(!filtrados.length){ 
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">Nenhum código encontrado.</td></tr>'; 
+    return; 
+  }
+
   tbody.innerHTML = filtrados.map(c => {
     const i = STORE.codigos.indexOf(c);
-    return `<tr><td><strong>${c.codigo}</strong></td><td>${c.nome}</td><td><button class="btn red sm" onclick="removerCodigo(${i})">🗑️</button></td></tr>`;
+    return `<tr>
+              <td><strong>${c.codigo}</strong></td>
+              <td>${c.nome}</td>
+              <td><button class="btn red sm" onclick="removerCodigo(${i})">🗑️</button></td>
+            </tr>`;
   }).join('');
 }
 
