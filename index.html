@@ -1041,8 +1041,6 @@ function compararRelacaoComICS() {
 function processarIcsIndependente(jsonIcs) {
   STORE.ics = [];
 
-  // Primeiro conta duplicidades no arquivo bruto.
-  // Agora validando APENAS o AWB (código de rastreio).
   const contagemAwb = new Map();
 
   jsonIcs.forEach(linha => {
@@ -1071,7 +1069,6 @@ function processarIcsIndependente(jsonIcs) {
     const alturaBruta = val(linha, ['ALTURA DO PALLET', 'ALTURA PALLET', 'ALTURA', 'HEIGHT', 'NÍVEL', 'NIVEL']);
     const alturaInfo = parseAltura(alturaBruta);
 
-    // Bloqueia apenas se o AWB estiver duplicado no ICS
     if (awbsDuplicados.has(awb)) {
       const chaveErro = `AWB:${awb}`;
       if (!duplicadosRegistrados.has(chaveErro)) {
@@ -1095,10 +1092,8 @@ function processarIcsIndependente(jsonIcs) {
       }
     }
 
-    // Registros com erro não entram no fluxo operacional.
     if (possuiErroProduto) return;
 
-    // Se a altura vier do ICS, mantém o valor. Se não vier, tenta a Relação pelo lote.
     let alturaFinal = alturaInfo.num !== null ? alturaInfo.num : (alturaInfo.cat !== '—' ? alturaInfo.cat : '—');
     let categoriaFinal = alturaInfo.cat;
     if (alturaFinal === '—') {
