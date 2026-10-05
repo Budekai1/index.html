@@ -1042,20 +1042,15 @@ function processarIcsIndependente(jsonIcs) {
   STORE.ics = [];
 
   // Primeiro conta duplicidades no arquivo bruto.
-  // AWB (código de rastreio) repetido também é tratado como LOTE DUPLICADO.
+  // Agora validando APENAS o AWB (código de rastreio).
   const contagemAwb = new Map();
-  const contagemLote = new Map();
 
   jsonIcs.forEach(linha => {
     const awb = norm(val(linha, ['AWB', 'AWB/LOTE/MASTER', 'CÓDIGO DE RASTREIO', 'CODIGO DE RASTREIO', 'RASTREIO']));
-    const loteBruto = val(linha, ['REV', 'Lote/ID AWB Master', 'LOTE/ MASTER', 'LOTE / MASTER', 'LOTE/MASTER', 'LOTE', 'MASTER', 'A', 'LOTE INDÚSTRIA', 'LOTE INDUSTRIA', 'RECUSAS', 'PAR']);
-    const lote = normLote(loteBruto);
     if (awb) contagemAwb.set(awb, (contagemAwb.get(awb) || 0) + 1);
-    if (lote) contagemLote.set(lote, (contagemLote.get(lote) || 0) + 1);
   });
 
   const awbsDuplicados = new Set([...contagemAwb.entries()].filter(([, qtd]) => qtd > 1).map(([chave]) => chave));
-  const lotesDuplicados = new Set([...contagemLote.entries()].filter(([, qtd]) => qtd > 1).map(([chave]) => chave));
   const duplicadosRegistrados = new Set();
 
   jsonIcs.forEach(linha => {
@@ -1076,15 +1071,13 @@ function processarIcsIndependente(jsonIcs) {
     const alturaBruta = val(linha, ['ALTURA DO PALLET', 'ALTURA PALLET', 'ALTURA', 'HEIGHT', 'NÍVEL', 'NIVEL']);
     const alturaInfo = parseAltura(alturaBruta);
 
-    // Qualquer duplicidade é bloqueada antes de entrar no STORE.ics.
-    if (awbsDuplicados.has(awb) || lotesDuplicados.has(lote)) {
-      const chaveErro = awbsDuplicados.has(awb) ? `AWB:${awb}` : `LOTE:${lote}`;
+    // Bloqueia apenas se o AWB estiver duplicado no ICS
+    if (awbsDuplicados.has(awb)) {
+      const chaveErro = `AWB:${awb}`;
       if (!duplicadosRegistrados.has(chaveErro)) {
         duplicadosRegistrados.add(chaveErro);
-        const detalhe = awbsDuplicados.has(awb)
-          ? `O código de rastreio/AWB "${awb}" está duplicado no arquivo ICS.`
-          : `O lote "${lote}" está duplicado no arquivo ICS.`;
-        registrarErro('LOTE DUPLICADO', detalhe, palletFinal, lote, awb, produto);
+        const detalhe = `O código de rastreio/AWB "${awb}" está duplicado no arquivo ICS.`;
+        registrarErro('AWB DUPLICADO', detalhe, palletFinal, lote, awb, produto);
       }
       return;
     }
