@@ -1149,9 +1149,9 @@ function processarRelacaoIndependente(jsonRelacao) {
     const {num, cat} = parseAltura(status);
     const alturaFormatada = num === null ? norm(status) : num;
 
-    // Lote duplicado = mesma identificação de lote em mais de uma ocorrência/pallet.
-    // Todas as ocorrências do lote são retiradas da Relação para não seguirem o fluxo.
-    const loteDuplicado = mapaLotes[lote].size > 1 || jsonRelacao.filter(l => normLote(val(l, ['LOTE', 'LOTE / MASTER', 'LOTE/MASTER', 'MASTER'])) === lote).length > 1;
+    // Lote duplicado = mesmo lote em pallets diferentes.
+    // Se estiver repetido na planilha mas for o mesmo pallet (ou sem pallet distinto), o sistema aceita.
+    const loteDuplicado = mapaLotes[lote].size > 1;
     if (loteDuplicado) {
       if (!lotesDuplicadosRegistrados.has(lote)) {
         lotesDuplicadosRegistrados.add(lote);
