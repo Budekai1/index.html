@@ -82,7 +82,7 @@ nav button {
   cursor: pointer; 
   border-bottom: 3px solid transparent; 
   white-space: nowrap; 
-  transition: all 0.2s;
+  transition: all 0.2s; 
   position: relative;
 }
 nav button:hover { color: #60a5fa; background: rgba(255, 255, 255, 0.02); }
@@ -281,13 +281,13 @@ tr:hover td { background: #1a2538; }
 *::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 #filtroCatErros {
-    background-color: var(--surface) !important;
-    color: var(--text) !important;
-    border: 1px solid var(--border) !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
 }
 #filtroCatErros option {
-    background-color: var(--surface);
-    color: var(--text);
+  background-color: var(--surface);
+  color: var(--text);
 }
 </style>
 </head>
@@ -606,7 +606,6 @@ function tocarSom(tipo) {
       osc.start(agora);
       osc.stop(agora + 0.1);
     } else {
-      // Bipe padrão rápido para uploads e ações gerais
       osc.type = 'sine';
       osc.frequency.setValueAtTime(600, agora);
       gain.gain.setValueAtTime(0.06, agora);
@@ -623,7 +622,7 @@ document.addEventListener('click', function unlockAudio() {
 
 const LS_KEY = 'wms_codigos_clientes';
 const STORE = {
-  relacao: [], ics: [], armazém: [], armazem: [], alocacao: [],
+  relacao: [], ics: [], armazem: [], alocacao: [],
   estoqueLocal: [], estoqueLocalRaw: [], saida: [], concatenar: [], codigos: [], erros: [], palletEndereco: [], validacaoFinal: []
 };
 
@@ -731,12 +730,27 @@ function lerArquivo(file, cb) {
     reader.readAsArrayBuffer(file);
   }
 }
+
+// CORREÇÃO CRÍTICA: Busca exata primeiro, sem verificação reversa para evitar colisão AWB x Lote
 function acharColuna(linha, alias){
   const keys = Object.keys(linha);
-  for(const a of alias){ for(const k of keys){ if(norm(k) === norm(a)) return k; } }
-  for(const a of alias){ for(const k of keys){ if(norm(k).includes(norm(a)) || norm(a).includes(norm(k))) return k; } }
+  // 1ª Tentativa: Correspondência exata normalizada
+  for(const a of alias){
+    for(const k of keys){
+      if(norm(k) === norm(a)) return k;
+    }
+  }
+  // 2ª Tentativa: O cabeçalho real da tabela contém o padrão procurado
+  for(const a of alias){
+    for(const k of keys){
+      const na = norm(a);
+      const nk = norm(k);
+      if(na.length >= 3 && nk.includes(na)) return k;
+    }
+  }
   return null;
 }
+
 function acharColunaFlex(linha, alias, padroes){
   const keys = Object.keys(linha);
   for(const a of alias){ for(const k of keys){ if(normCab(k) === normCab(a)) return k; } }
@@ -901,7 +915,6 @@ function renderCodigos(){
   const tbody = document.getElementById('tbodyCodigos');
   if(!tbody) return;
 
-  // Usa ternário: se tiver texto na busca, ele filtra; se não tiver, exibe todos os códigos (STORE.codigos)
   const filtrados = busca 
     ? STORE.codigos.filter(c => norm(c.codigo).includes(busca) || norm(c.nome).includes(busca)) 
     : STORE.codigos;
@@ -955,8 +968,6 @@ function renderErros(){
     selCat.value = categorias.includes(catAtual) ? catAtual : '';
   }
 
-  // Agrupa todos os erros do mesmo item para que ele apareça uma única vez,
-  // trazendo todas as categorias na coluna ERROS.
   const grupos = new Map();
   STORE.erros.forEach(e => {
     const chaveItem = norm(e.lote) || norm(e.awb) || (norm(e.pallet) + '|' + norm(e.produto));
@@ -984,7 +995,7 @@ function renderErros(){
   if(!tbody) return;
   if(cntErros) cntErros.textContent = filtrados.length + ' registros';
   if(!filtrados.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Digite algo para pesquisar.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Nenhum erro registrado.</td></tr>';
     return;
   }
 
@@ -1034,17 +1045,17 @@ function compararRelacaoComICS() {
     }
   });
 
-  // Registro com erro NÃO pode continuar para as próximas etapas.
   STORE.relacao = relacaoValida;
 }
 
+// CORREÇÃO CRÍTICA NO PROCESSAMENTO DA PLANILHA ICS
 function processarIcsIndependente(jsonIcs) {
   STORE.ics = [];
 
   const contagemAwb = new Map();
 
   jsonIcs.forEach(linha => {
-    const awb = norm(val(linha, ['AWB', 'AWB/LOTE/MASTER', 'CÓDIGO DE RASTREIO', 'CODIGO DE RASTREIO', 'RASTREIO']));
+    const awb = norm(val(linha, ['AWB', 'CODIGO DE RASTREIO', 'CÓDIGO DE RASTREIO', 'RASTREIO', 'AWB/LOTE/MASTER']));
     if (awb) contagemAwb.set(awb, (contagemAwb.get(awb) || 0) + 1);
   });
 
@@ -1053,13 +1064,26 @@ function processarIcsIndependente(jsonIcs) {
 
   jsonIcs.forEach(linha => {
     const produto = norm(val(linha, ['PRODUTO/NOME FANTASIA', 'NOME FANTASIA DO CLIENTE', 'NOME FANTASIA', 'CLIENTE', 'PRODUTO']));
-    const awb = norm(val(linha, ['AWB', 'AWB/LOTE/MASTER', 'CÓDIGO DE RASTREIO', 'CODIGO DE RASTREIO', 'RASTREIO']));
-    const loteBruto = val(linha, ['REV', 'Lote/ID AWB Master', 'LOTE/ MASTER', 'LOTE / MASTER', 'LOTE/MASTER', 'LOTE', 'MASTER', 'A', 'LOTE INDÚSTRIA', 'LOTE INDUSTRIA', 'RECUSAS', 'PAR']);
+    const awb = norm(val(linha, ['AWB', 'CODIGO DE RASTREIO', 'CÓDIGO DE RASTREIO', 'RASTREIO', 'AWB/LOTE/MASTER']));
+    
+    // Removido 'Lote/ID AWB Master' e 'A' solto que causavam substituição indevida da AWB no lugar do Lote
+    const loteBruto = val(linha, [
+      'LOTE / MASTER',
+      'LOTE/ MASTER',
+      'LOTE/MASTER',
+      'LOTE INDÚSTRIA',
+      'LOTE INDUSTRIA',
+      'LOTE',
+      'MASTER',
+      'REV',
+      'RECUSAS',
+      'PAR'
+    ]);
     const lote = normLote(loteBruto);
 
     if(!lote && !awb) return;
 
-    let palletFinal = norm(val(linha, ['PALET', 'PALLET', 'PALLETE', 'PALETE', 'Nº PALLET', 'PAR', 'LACRES', 'PALLET ', 'ENDEREÇO', 'ENDERECO']));
+    let palletFinal = norm(val(linha, ['PALET', 'PALLET', 'PALLETE', 'PALETE', 'Nº PALLET', 'LACRES', 'PALLET ']));
     if (!palletFinal || palletFinal === 'N/A' || palletFinal === '—') {
       const relMatch = STORE.relacao.find(r => normLote(r.lote) === lote);
       if (relMatch) palletFinal = norm(relMatch.pallet || relMatch.pallete || relMatch.par || relMatch.lacres || relMatch.endereco);
@@ -1137,15 +1161,13 @@ function processarRelacaoIndependente(jsonRelacao) {
   jsonRelacao.forEach(linha => {
     const lote = normLote(val(linha, ['LOTE', 'LOTE / MASTER', 'LOTE/MASTER', 'MASTER']));
     const pallet = norm(val(linha, ['PALLET', 'PALLETE', 'PALETE', 'Nº PALLET'])) || 'N/A';
-    const obs = val(linha, ['OBSERVAÇÕES', 'OBSERVACAO', 'OBS', 'OBSERVAÇÕES']);
+    const obs = val(linha, ['OBSERVAÇÕES', 'OBSERVACAO', 'OBS']);
     if (!lote) return;
 
     const status = val(linha, ['STATUS', 'ALTURA DO PALLET', 'ALTURA PALLET', 'ALTURA', 'HEIGHT']);
     const {num, cat} = parseAltura(status);
     const alturaFormatada = num === null ? norm(status) : num;
 
-    // Lote duplicado = mesmo lote em pallets diferentes.
-    // Se estiver repetido na planilha mas for o mesmo pallet (ou sem pallet distinto), o sistema aceita.
     const loteDuplicado = mapaLotes[lote].size > 1;
     if (loteDuplicado) {
       if (!lotesDuplicadosRegistrados.has(lote)) {
@@ -1219,7 +1241,7 @@ function renderIcs(){
   const filtrados = busca ? STORE.ics.filter(r => norm(r.produto).includes(busca) || norm(r.awb).includes(busca) || norm(r.lote).includes(busca) || norm(r.pallet).includes(busca) || norm(r.altura).includes(busca)) : STORE.ics;
   const cnt = document.getElementById('cntIcs');
   if(cnt) cnt.textContent = filtrados.length + ' registros';
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5">Nenhum registro ICS.</td></tr>'; return; }
+  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Nenhum registro ICS.</td></tr>'; return; }
   tbody.innerHTML = filtrados.map(r => `
     <tr>
       <td>${r.produto}</td>
@@ -1256,7 +1278,7 @@ function importarArmazem(input){
       let status = parseInt(estoque, 10);
       if(isNaN(status)) status = (norm(estoque) === 'CHEIO' || norm(estoque) === 'OCUPADO' || norm(estoque) === '1') ? 1 : 0;
       if(status !== 0) return;
-      let montante = norm(val(linha, ['PREDIO','MONTANTE','PRÉDIO']));
+      let montante = norm(val(linha, ['PREDIE','PREDIO','MONTANTE','PRÉDIO']));
       if(!montante) montante = endereco.substring(4,7);
       let altura = norm(val(linha, ['ANDAR','ALTURA','NIVEL','NÍVEL']));
       if(!altura) altura = endereco.substring(7,9);
@@ -1400,7 +1422,7 @@ function renderAlocacao(){
   const cnt = document.getElementById('cntAlocacao');
   if(cnt) cnt.textContent = filtrados.length + ' registros';
   if(!tbody) return;
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5">Nenhuma alocação executada.</td></tr>'; return; }
+  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Nenhuma alocação executada.</td></tr>'; return; }
   
   tbody.innerHTML = filtrados.map(r => `
     <tr>
@@ -1447,7 +1469,7 @@ function renderSaida(){
   if(!tbody) return;
   const filtrados = busca ? STORE.saida.filter(s => norm(s.Codigo).includes(busca) || norm(s.Endereço).includes(busca) || norm(s.Estoque).includes(busca) || norm(s.DataVencimento).includes(busca) || norm(s.Awb).includes(busca)) : STORE.saida;
   if(cnt) cnt.textContent = filtrados.length + ' registros';
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5">Nenhum registro de saída localizado.</td></tr>'; return; }
+  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Nenhum registro de saída localizado.</td></tr>'; return; }
   tbody.innerHTML = filtrados.map(s => `<tr><td><strong>${s.Codigo}</strong></td><td>${s.Endereço}</td><td>${s.Estoque}</td><td>${s.DataVencimento}</td><td><strong>${s.Awb}</strong></td></tr>`).join('');
 }
 function baixarSaidaExcel(){
@@ -1490,7 +1512,7 @@ function renderConcatenar(){
   if(!tbody) return;
   const filtrados = busca ? STORE.concatenar.filter(item => norm(item.texto).includes(busca)) : STORE.concatenar;
   if(cnt) cnt.textContent = filtrados.length + ' registros';
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td>Nenhum registro concatenado.</td></tr>'; return; }
+  if(!filtrados.length){ tbody.innerHTML = '<tr><td class="empty-msg">Nenhum registro concatenado.</td></tr>'; return; }
   tbody.innerHTML = filtrados.map(item => `<tr><td><code style="font-family:monospace; font-size:.88rem; background:#0f172a; color:#f8fafc; padding:6px 10px; display:block; white-space:pre; border-radius:4px; border:1px solid rgba(255,255,255,0.05);">${item.texto}</code></td></tr>`).join('');
 }
 function baixarConcatenarTxt(){
@@ -1540,7 +1562,7 @@ function renderPalletEndereco(){
   const filtrados = busca ? STORE.palletEndereco.filter(item => norm(item.pallet).includes(busca) || norm(item.endereco).includes(busca)) : STORE.palletEndereco;
   const cnt = document.getElementById('cntPalletEndereco');
   if(cnt) cnt.textContent = filtrados.length + ' registros';
-  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="2">Nenhum dado encontrado.</td></tr>'; return; }
+  if(!filtrados.length){ tbody.innerHTML = '<tr><td colspan="2" class="empty-msg">Nenhum dado encontrado.</td></tr>'; return; }
   tbody.innerHTML = filtrados.map(item => `<tr><td><strong>${item.pallet}</strong></td><td>${item.endereco}</td></tr>`).join('');
 }
 function copiarTabelaOutlook() {
@@ -1549,9 +1571,31 @@ function copiarTabelaOutlook() {
   let htmlTable = `<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-family:Arial;font-size:11pt;"><tr style="background:#f2f2f2;"><th>PALLET</th><th>ENDEREÇO</th></tr>`;
   STORE.palletEndereco.forEach(i => htmlTable += `<tr><td>${i.pallet}</td><td>${i.endereco}</td></tr>`);
   htmlTable += `</table>`;
-  navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([htmlTable], { type: 'text/html' }), 'text/plain': new Blob([STORE.palletEndereco.map(i => `${i.pallet}\t${i.endereco}`).join('\n')], { type: 'text/plain' }) })]).then(() => {
-    toast('Tabela copiada com sucesso para o Outlook!', 'success');
-  }).catch(err => toast('Erro ao copiar', 'error'));
+  const plainText = STORE.palletEndereco.map(i => `${i.pallet}\t${i.endereco}`).join('\n');
+  
+  if (navigator.clipboard && window.ClipboardItem) {
+    navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([htmlTable], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' })
+      })
+    ]).then(() => {
+      toast('Tabela copiada com sucesso para o Outlook!', 'success');
+    }).catch(() => {
+      fallbackCopiar(plainText);
+    });
+  } else {
+    fallbackCopiar(plainText);
+  }
+}
+function fallbackCopiar(txt) {
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  toast('Tabela copiada em texto simples!', 'success');
 }
 
 function gerarValidacaoFinal() {
@@ -1634,8 +1678,12 @@ function salvarHistorico() {
   ];
   baixarExcel(abasParaExcel, "historico_wms_completo.xlsx");
   
-  const estadoGeral = { relacao: STORE.relacao, ics: STORE.ics, armazem: STORE.armazem, alocacao: STORE.alocacao, estoqueLocal: STORE.estoqueLocal, saida: STORE.saida, concatenar: STORE.concatenar, codigos: STORE.codigos, erros: STORE.erros, palletEndereco: STORE.palletEndereco, validacaoFinal: STORE.validacaoFinal };
-  localStorage.setItem('wms_backup_geral', JSON.stringify(estadoGeral));
+  try {
+    const estadoGeral = { relacao: STORE.relacao, ics: STORE.ics, armazem: STORE.armazem, alocacao: STORE.alocacao, estoqueLocal: STORE.estoqueLocal, saida: STORE.saida, concatenar: STORE.concatenar, codigos: STORE.codigos, erros: STORE.erros, palletEndereco: STORE.palletEndereco, validacaoFinal: STORE.validacaoFinal };
+    localStorage.setItem('wms_backup_geral', JSON.stringify(estadoGeral));
+  } catch(e) {
+    console.warn('Backup local não pôde ser gravado (limite de espaço excedido).', e);
+  }
   toast('Histórico salvo e arquivo Excel baixado com sucesso!', 'success');
 }
 function confirmarZerar() {
